@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DupeHunter v3.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --accent:   #4fffb0;
+  --accent2:  #ff6b6b;
+  --accent3:  #ffd166;
+  --accent4:  #74b9ff;
+  --accent5:  #c77dff;
+  --panel:    #0f1629;
+  --panel2:   #141c35;
+  --bg:       #0a0e1a;
+  --border:   #1e2d4a;
+  --text:     #cdd6f4;
+  --text-dim: #6b7db3;
+  --glow:     0 0 12px rgba(79,255,176,0.4);
+  --glow2:    0 0 12px rgba(255,107,107,0.4);
+  --glow3:    0 0 12px rgba(255,209,102,0.4);
+  --radius:   4px;
+  --font-px:  'Press Start 2P', monospace;
+  --font-vt:  'VT323', monospace;
+  --font-mono:'Share Tech Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanlines */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.04) 2px,
+    rgba(0,0,0,0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Header ── */
+.header {
+  padding: 20px 24px 16px;
+  border-bottom: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(180deg, rgba(79,255,176,0.03) 0%, transparent 100%);
+}
+
+.logo {
+  font-family: var(--font-px);
+  font-size: 13px;
+  color: var(--accent);
+  text-shadow: var(--glow);
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+.logo span { color: var(--accent2); }
+
+.version-badge {
+  font-family: var(--font-vt);
+  font-size: 18px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+}
+
+/* ── Webhook bar ── */
+.webhook-bar {
+  padding: 16px 24px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.webhook-bar label {
+  font-family: var(--font-px);
+  font-size: 8px;
+  color: var(--accent4);
+  white-space: nowrap;
+}
+
+.webhook-bar input {
+  flex: 1;
+  min-width: 260px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.webhook-bar input:focus {
+  border-color: var(--accent4);
+  box-shadow: 0 0 8px rgba(116,185,255,0.3);
+}
+.webhook-bar input::placeholder { color: var(--text-dim); font-size: 12px; }
+
+/* ── Buttons ── */
+.btn {
+  font-family: var(--font-px);
+  font-size: 7px;
+  padding: 9px 14px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #0a0e1a;
+}
+.btn-primary:hover:not(:disabled) {
+  box-shadow: var(--glow);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--accent2);
+  border: 1px solid var(--accent2);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255,107,107,0.1);
+  box-shadow: var(--glow2);
+}
+
+.btn-warn {
+  background: transparent;
+  color: var(--accent3);
+  border: 1px solid var(--accent3);
+}
+.btn-warn:hover:not(:disabled) {
+  background: rgba(255,209,102,0.1);
+  box-shadow: var(--glow3);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent4);
+  color: var(--accent4);
+}
+
+.btn-sm { font-size: 6px; padding: 6px 10px; }
+
+/* ── Entity tabs ── */
+.entity-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.tab-btn {
+  font-family: var(--font-px);
+  font-size: 7px;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: 1px;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  text-shadow: var(--glow);
+}
+
+/* ── Main layout ── */
+.main {
+  display: grid;
+  grid-template-columns: 220px 200px 1fr;
+  gap: 0;
+  height: calc(100vh - 180px);
+  min-height: 400px;
+}
+
+/* ── Panels ── */
+.panel {
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-title {
+  font-family: var(--font-px);
+  font-size: 7px;
+  color: var(--accent4);
+  letter-spacing: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+/* ── Filter panel ── */
+.filter-group { display: flex; flex-direction: column; gap: 6px; }
+.filter-label {
+  font-family: var(--font-px);
+  font-size: 6px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+select, .select {
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+select:focus { border-color: var(--accent4); }
+select option { background: var(--panel2); }
+
+/* ── Keys panel ── */
+.check-list { display: flex; flex-direction: column; gap: 8px; }
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  transition: all .15s;
+}
+.check-item:hover { background: rgba(79,255,176,0.05); border-color: var(--border); }
+.check-item input[type=checkbox] { display: none; }
+
+.check-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .15s;
+  font-size: 10px;
+}
+.check-item.checked .check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0e1a;
+}
+
+.check-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: color .15s;
+}
+.check-item.checked .check-label { color: var(--text); }
+
+.mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.mode-btn {
+  flex: 1;
+  font-family: var(--font-px);
+  font-size: 7px;
+  padding: 7px 4px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .15s;
+  letter-spacing: 1px;
+}
+.mode-btn.active {
+  background: rgba(79,255,176,0.1);
+  color: var(--accent);
+}
+
+/* ── Action panel ── */
+.action-list { display: flex; flex-direction: column; gap: 8px; }
+
+.action-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s;
+}
+.action-item:hover { border-color: var(--text-dim); }
+.action-item.selected { border-color: var(--accent); background: rgba(79,255,176,0.06); }
+
+.action-name {
+  font-family: var(--font-px);
+  font-size: 7px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.action-item.selected .action-name { text-shadow: var(--glow); }
+.action-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+/* Action-specific colors */
+.action-item[data-action="delete"].selected { border-color: var(--accent2); background: rgba(255,107,107,0.06); }
+.action-item[data-action="delete"].selected .action-name { color: var(--accent2); text-shadow: var(--glow2); }
+.action-item[data-action="stage"].selected  { border-color: var(--accent3); background: rgba(255,209,102,0.06); }
+.action-item[data-action="stage"].selected .action-name  { color: var(--accent3); text-shadow: var(--glow3); }
+.action-item[data-action="field"].selected  { border-color: var(--accent5); background: rgba(199,125,255,0.06); }
+.action-item[data-action="field"].selected .action-name  { color: var(--accent5); }
+
+/* Sub-options */
+.sub-opts {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sub-opts.hidden { display: none; }
+
+/* ── Content area ── */
+.content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-top {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Progress ── */
+.progress-wrap {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.progress-bar-bg {
+  height: 6px;
+  background: var(--panel2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent4), var(--accent));
+  border-radius: 3px;
+  width: 0%;
+  transition: width .3s;
+}
+.progress-text {
+  font-family: var(--font-vt);
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+/* ── Log console ── */
+.log-wrap {
+  flex: 0 0 120px;
+  border-bottom: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.3);
+}
+.log-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.log-line.ok  { color: var(--accent); }
+.log-line.err { color: var(--accent2); }
+.log-line.warn{ color: var(--accent3); }
+.log-line.info{ color: var(--accent4); }
+
+/* ── Status bar ── */
+.statusbar {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-vt);
+  font-size: 17px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.statusbar .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+.statusbar.ok   .dot { background: var(--accent); box-shadow: var(--glow); }
+.statusbar.err  .dot { background: var(--accent2); box-shadow: var(--glow2); }
+.statusbar.busy .dot { background: var(--accent3); box-shadow: var(--glow3); animation: pulse .8s infinite; }
+
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+
+/* ── Results ── */
+.results-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.results-count {
+  font-family: var(--font-px);
+  font-size: 8px;
+  color: var(--accent3);
+}
+.results-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Group card ── */
+.group-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.group-card:hover { border-color: var(--text-dim); }
+
+.group-header {
+  padding: 10px 14px;
+  background: var(--panel2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.group-title {
+  font-family: var(--font-px);
+  font-size: 7px;
+  color: var(--accent3);
+}
+.group-count {
+  font-family: var(--font-vt);
+  font-size: 16px;
+  color: var(--text-dim);
+}
+.group-actions { display: flex; gap: 6px; }
+
+.group-body { padding: 8px 0; }
+
+.record-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 8px;
+  padding: 6px 14px;
+  align-items: center;
+  border-bottom: 1px solid rgba(30,45,74,0.5);
+  transition: background .15s;
+}
+.record-row:last-child { border-bottom: none; }
+.record-row:hover { background: rgba(79,255,176,0.03); }
+
+.record-num {
+  font-family: var(--font-vt);
+  font-size: 16px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.record-num.master { color: var(--accent); font-size: 18px; }
+
+.record-info { display: flex; flex-direction: column; gap: 2px; }
+.record-name { font-size: 13px; color: var(--text); }
+.record-meta { font-size: 11px; color: var(--text-dim); }
+
+.record-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+.record-id a {
+  color: var(--accent4);
+  text-decoration: none;
+}
+.record-id a:hover { text-decoration: underline; }
+
+/* ── Placeholder ── */
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 40px;
+}
+.placeholder-icon {
+  font-size: 48px;
+  opacity: .4;
+}
+.placeholder-text {
+  font-family: var(--font-px);
+  font-size: 8px;
+  color: var(--text-dim);
+  line-height: 2;
+}
+
+/* ── Field input ── */
+.field-input-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.field-input {
+  flex: 1;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+.field-input:focus { border-color: var(--accent5); }
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10000;
+}
+.toast {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  border-left: 3px solid;
+  background: var(--panel);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  animation: slide-in .2s ease;
+  max-width: 320px;
+}
+.toast.ok   { border-color: var(--accent);  color: var(--accent); }
+.toast.err  { border-color: var(--accent2); color: var(--accent2); }
+.toast.warn { border-color: var(--accent3); color: var(--accent3); }
+
+@keyframes slide-in { from { transform: translateX(40px); opacity:0; } to { transform: none; opacity:1; } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .main { grid-template-columns: 1fr; height: auto; }
+  .panel { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* ── Funnel select for deals ── */
+#funnelWrap { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="logo">DUPE<span>HUNTER</span></div>
+  <span class="version-badge">v3.0</span>
+</header>
+
+<!-- ── Webhook bar ── -->
+<div class="webhook-bar">
+  <label>WEBHOOK</label>
+  <input type="text" id="webhookInput" placeholder="https://your.bitrix24.kz/rest/1/abc.../  (входящий вебхук)" autocomplete="off" spellcheck="false">
+  <button class="btn btn-primary" id="btnLoad">▶ ЗАГРУЗИТЬ</button>
+</div>
+
+<!-- ── Entity tabs ── -->
+<div class="entity-tabs">
+  <button class="tab-btn active" data-entity="contacts">КОНТАКТЫ</button>
+  <button class="tab-btn" data-entity="companies">КОМПАНИИ</button>
+  <button class="tab-btn" data-entity="deals">СДЕЛКИ</button>
+  <button class="tab-btn" data-entity="leads">ЛИДЫ</button>
+</div>
+
+<!-- ── Main layout ── -->
+<div class="main">
+
+  <!-- ── Panel: Filter ── -->
+  <div class="panel" id="filterPanel">
+    <div class="panel-title">⚙ ФИЛЬТР</div>
+
+    <!-- Funnel (only deals) -->
+    <div class="filter-group" id="funnelWrap">
+      <div class="filter-label">ВОРОНКА</div>
+      <select id="funnelSelect"><option value="">Все воронки</option></select>
+    </div>
+
+    <!-- Master strategy -->
+    <div class="filter-group">
+      <div class="filter-label">ОСНОВНАЯ ЗАПИСЬ</div>
+      <select id="masterSelect">
+        <option value="oldest">Самая старая (↑ ID)</option>
+        <option value="newest">Самая новая (↓ ID)</option>
+      </select>
+    </div>
+
+    <!-- Warning for merge deals -->
+    <div id="mergeDealsWarn" style="display:none; padding:8px; border:1px solid var(--accent3); border-radius:var(--radius); font-size:11px; color:var(--accent3); line-height:1.5;">
+      ⚠ Товарные позиции при слиянии сделок НЕ переносятся. Проверьте вручную.
+    </div>
+  </div>
+
+  <!-- ── Panel: Keys ── -->
+  <div class="panel" id="keysPanel">
+    <div class="panel-title">🔑 КЛЮЧИ ДУБЛЯ</div>
+
+    <!-- Contacts keys -->
+    <div id="kContacts" class="check-list">
+      <label class="check-item checked" data-key="phone">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <span class="check-label">Телефон</span>
+      </label>
+      <label class="check-item" data-key="email">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Email</span>
+      </label>
+      <label class="check-item" data-key="name">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Имя + фамилия</span>
+      </label>
+    </div>
+
+    <!-- Companies keys -->
+    <div id="kCompanies" class="check-list" style="display:none;">
+      <label class="check-item checked" data-key="title">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <span class="check-label">Название</span>
+      </label>
+      <label class="check-item" data-key="phone">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Телефон</span>
+      </label>
+      <label class="check-item" data-key="email">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Email</span>
+      </label>
+    </div>
+
+    <!-- Deals keys -->
+    <div id="kDeals" class="check-list" style="display:none;">
+      <label class="check-item checked" data-key="contact_id">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <span class="check-label">ID контакта</span>
+      </label>
+      <label class="check-item" data-key="company_id">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">ID компании</span>
+      </label>
+      <label class="check-item" data-key="title">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Название сделки</span>
+      </label>
+      <label class="check-item" data-key="contact_phone">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Тел. контакта*</span>
+      </label>
+      <label class="check-item" data-key="contact_email">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Email контакта*</span>
+      </label>
+    </div>
+
+    <!-- Leads keys -->
+    <div id="kLeads" class="check-list" style="display:none;">
+      <label class="check-item checked" data-key="phone">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <span class="check-label">Телефон</span>
+      </label>
+      <label class="check-item" data-key="email">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Email</span>
+      </label>
+      <label class="check-item" data-key="name">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Имя + фамилия</span>
+      </label>
+      <label class="check-item" data-key="title">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <span class="check-label">Название лида</span>
+      </label>
+    </div>
+
+    <!-- OR / AND mode -->
+    <div style="margin-top:8px;">
+      <div class="filter-label" style="margin-bottom:6px;">РЕЖИМ СОВПАДЕНИЯ</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="OR">ИЛИ</button>
+        <button class="mode-btn" data-mode="AND">И</button>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:6px; line-height:1.5;" id="modeHint">
+        Дубль = совпадение хотя бы по одному ключу
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Panel: Action + Content ── -->
+  <div style="display:flex; flex-direction:column; overflow:hidden; border-right:none;">
+
+    <!-- Action selector (horizontal top strip) -->
+    <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; background:var(--panel2);">
+      <div class="filter-label" style="width:100%; margin-bottom:4px;">ДЕЙСТВИЕ НАД ДУБЛЯМИ</div>
+
+      <div class="action-item selected" data-action="merge" style="flex:1; min-width:120px;">
+        <div class="action-name">⊕ ВЛИТЬ</div>
+        <div class="action-desc">Перенести все данные на основную запись, дубли удалить</div>
+      </div>
+      <div class="action-item" data-action="delete" style="flex:1; min-width:120px;">
+        <div class="action-name">✕ УДАЛИТЬ</div>
+        <div class="action-desc">Оставить основную запись, дубли удалить</div>
+      </div>
+      <div class="action-item" data-action="stage" style="flex:1; min-width:120px;" id="actionStage">
+        <div class="action-name">→ СТАДИЯ</div>
+        <div class="action-desc">Перевести дубли в выбранную стадию</div>
+      </div>
+      <div class="action-item" data-action="field" style="flex:1; min-width:120px;">
+        <div class="action-name">🏷 МЕТКА</div>
+        <div class="action-desc">Поставить метку в пользовательское поле</div>
+      </div>
+
+      <!-- Stage sub-options -->
+      <div class="sub-opts hidden" id="subStage" style="width:100%;">
+        <div class="filter-label">СТАДИЯ ДЛЯ ДУБЛЕЙ</div>
+        <select id="stageSelect" style="max-width:360px;"><option value="">— загрузите портал —</option></select>
+      </div>
+
+      <!-- Field sub-options -->
+      <div class="sub-opts hidden" id="subField" style="width:100%;">
+        <div class="filter-label">ПОЛЕ ДЛЯ МЕТКИ</div>
+        <div class="field-input-wrap">
+          <input type="text" class="field-input" id="fieldName" placeholder="UF_CRM_..." style="max-width:220px;">
+          <input type="text" class="field-input" id="fieldValue" placeholder="ДУБЛЬ" style="max-width:120px;">
+          <button class="btn btn-ghost btn-sm" id="btnTestField">🔧 ТЕСТ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content area -->
+    <div class="content">
+
+      <!-- Top bar -->
+      <div class="content-top">
+        <button class="btn btn-primary" id="btnFind">🔍 НАЙТИ ДУБЛИ</button>
+        <button class="btn btn-danger" id="btnExecAll" disabled>⚡ ВЫПОЛНИТЬ ВСЕ</button>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" id="btnExportCSV" disabled>↓ CSV</button>
+        <button class="btn btn-ghost btn-sm" id="btnExportJSON" disabled>↓ JSON</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="progressWrap" style="display:none;">
+        <div class="progress-text" id="progressText">Загрузка...</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+      </div>
+
+      <!-- Log console -->
+      <div class="log-wrap" id="logWrap"></div>
+
+      <!-- Status -->
+      <div class="statusbar" id="statusBar">
+        <div class="dot"></div>
+        <span id="statusText">Ожидание</span>
+      </div>
+
+      <!-- Results -->
+      <div class="results-wrap" id="resultsWrap">
+        <div class="placeholder" id="placeholder">
+          <div class="placeholder-icon">◈</div>
+          <div class="placeholder-text">
+            Введите вебхук и нажмите ЗАГРУЗИТЬ<br>
+            Затем выберите ключи и нажмите НАЙТИ ДУБЛИ
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
+const S = {
+  entity:    'contacts',
+  webhook:   '',
+  funnels:   [],
+  stages:    [],
+  records:   [],
+  groups:    [],
+  action:    'merge',
+  matchMode: 'OR',
+  master:    'oldest',
+  portalDomain: '',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════════════════════════
+function notify(msg, type = 'ok') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+function log(msg, type = '') {
+  const w = document.getElementById('logWrap');
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  const ts = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  line.textContent = `[${ts}] ${msg}`;
+  w.appendChild(line);
+  w.scrollTop = w.scrollHeight;
+}
+
+function setStatus(msg, state = '') {
+  const bar  = document.getElementById('statusBar');
+  const text = document.getElementById('statusText');
+  bar.className = `statusbar ${state}`;
+  text.textContent = msg;
+}
+
+function setProgress(pct, msg) {
+  const wrap = document.getElementById('progressWrap');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  if (pct === null) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  fill.style.width = pct + '%';
+  if (msg) text.textContent = msg;
+}
+
+// ── Phone normalizer (RU/KZ: 8→7) ──
+function normPhone(raw) {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '8') return '7' + digits.slice(1);
+  return digits;
+}
+
+function normStr(s) {
+  if (!s) return '';
+  return String(s).toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function getPhones(rec) {
+  const phones = rec.PHONE || [];
+  return phones.map(p => normPhone(p.VALUE)).filter(Boolean);
+}
+
+function getEmails(rec) {
+  const emails = rec.EMAIL || [];
+  return emails.map(e => (e.VALUE || '').toLowerCase().trim()).filter(Boolean);
+}
+
+// ── Extract portal domain for profile links ──
+function extractDomain(webhook) {
+  try { return new URL(webhook).origin; }
+  catch { return ''; }
+}
+
+function recordLink(id) {
+  if (!S.portalDomain) return '#';
+  const paths = {
+    contacts:  `/crm/contact/details/${id}/`,
+    companies: `/crm/company/details/${id}/`,
+    deals:     `/crm/deal/details/${id}/`,
+    leads:     `/crm/lead/details/${id}/`,
+  };
+  return S.portalDomain + (paths[S.entity] || '#');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API
+// ══════════════════════════════════════════════════════════════════════════════
+async function b24(method, params = {}) {
+  const res = await fetch('/b24proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ webhook: S.webhook, method, params }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error + ': ' + (data.error_description || ''));
+  return data;
+}
+
+// Paginated loader — collects all pages (50 per page)
+async function b24all(method, params = {}, onPage) {
+  let start = 0;
+  const all = [];
+  for (;;) {
+    const data = await b24(method, { ...params, start });
+    const result = Array.isArray(data.result) ? data.result : [];
+    all.push(...result);
+    if (onPage) onPage(all.length, data.total);
+    if (result.length < 50) break;
+    start += 50;
+  }
+  return all;
+}
+
+// Parallel batch — runs fn(item) in groups of concurrency
+async function batchMap(items, fn, concurrency = 10) {
+  const results = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const slice = items.slice(i, i + concurrency);
+    const res   = await Promise.all(slice.map(fn));
+    results.push(...res);
+  }
+  return results;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PORTAL LOAD
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadPortal() {
+  log('Загрузка воронок...', 'info');
+  setStatus('Загрузка портала...', 'busy');
+
+  // Load funnels (deals)
+  try {
+    const fd = await b24('crm.category.list', { entityTypeId: 2 });
+    S.funnels = Array.isArray(fd.result?.categories) ? fd.result.categories : [];
+  } catch { S.funnels = []; }
+
+  // Load stages
+  try {
+    const sd = await b24('crm.status.list', {});
+    const all = Array.isArray(sd.result) ? sd.result : [];
+    S.stages = all.filter(s => s.ENTITY_ID && s.ENTITY_ID.startsWith('DEAL_STAGE'));
+  } catch { S.stages = []; }
+
+  // Populate funnel select
+  const fs = document.getElementById('funnelSelect');
+  fs.innerHTML = '<option value="">Все воронки</option>';
+  S.funnels.forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.ID;
+    o.textContent = f.NAME || `Воронка #${f.ID}`;
+    fs.appendChild(o);
+  });
+
+  // Populate stage select
+  populateStageSelect();
+
+  log(`Загружено ${S.funnels.length} воронок, ${S.stages.length} стадий`, 'ok');
+  setStatus('Портал загружен', 'ok');
+}
+
+function populateStageSelect(funnelId = '') {
+  const ss = document.getElementById('stageSelect');
+  ss.innerHTML = '<option value="">— выберите стадию —</option>';
+  let stages = S.stages;
+  if (funnelId) {
+    stages = stages.filter(s =>
+      s.ENTITY_ID === `DEAL_STAGE_C${funnelId}` ||
+      (s.STATUS_ID && s.STATUS_ID.startsWith(`C${funnelId}:`))
+    );
+  }
+  if (!stages.length) stages = S.stages;
+  stages.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.STATUS_ID;
+    o.textContent = `${s.NAME} [${s.STATUS_ID}]`;
+    ss.appendChild(o);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ENTITY SWITCH
+// ══════════════════════════════════════════════════════════════════════════════
+function switchEntity(entity) {
+  S.entity = entity;
+  S.records = [];
+  S.groups = [];
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.entity === entity));
+
+  // Key panels
+  ['kContacts','kCompanies','kDeals','kLeads'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  const map = { contacts: 'kContacts', companies: 'kCompanies', deals: 'kDeals', leads: 'kLeads' };
+  if (map[entity]) document.getElementById(map[entity]).style.display = '';
+
+  // Funnel
+  document.getElementById('funnelWrap').style.display = entity === 'deals' ? '' : 'none';
+
+  // Stage action availability
+  const stageAction = document.getElementById('actionStage');
+  if (entity === 'contacts' || entity === 'companies') {
+    stageAction.style.opacity = '.4';
+    stageAction.style.pointerEvents = 'none';
+    if (S.action === 'stage') { S.action = 'merge'; updateActionUI(); }
+  } else {
+    stageAction.style.opacity = '';
+    stageAction.style.pointerEvents = '';
+  }
+
+  // Merge deals warning
+  document.getElementById('mergeDealsWarn').style.display = entity === 'deals' ? '' : 'none';
+
+  clearResults();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LOAD RECORDS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadRecords() {
+  const entity  = S.entity;
+  const funnelId = document.getElementById('funnelSelect').value;
+
+  const SELECT_MAP = {
+    contacts:  ['ID','NAME','LAST_NAME','SECOND_NAME','PHONE','EMAIL','DATE_CREATE'],
+    companies: ['ID','TITLE','PHONE','EMAIL','DATE_CREATE',
+                'COMMENTS','ADDRESS','ADDRESS_CITY','ADDRESS_COUNTRY',
+                'BANKING_DETAILS','HAS_PHONE','HAS_EMAIL',
+                'INDUSTRY','EMPLOYEES','REVENUE','CURRENCY_ID','LOGO',
+                'WEB','IM','UTM_SOURCE','UTM_MEDIUM','UTM_CAMPAIGN',
+                'ASSIGNED_BY_ID','CREATED_BY_ID','MODIFY_BY_ID',
+                'LEAD_ID','CONTACT_ID'],
+    deals:     ['ID','TITLE','CONTACT_ID','COMPANY_ID','STAGE_ID','CATEGORY_ID','DATE_CREATE'],
+    leads:     ['ID','TITLE','NAME','LAST_NAME','PHONE','EMAIL','DATE_CREATE'],
+  };
+
+  const METHOD_MAP = {
+    contacts: 'crm.contact.list',
+    companies:'crm.company.list',
+    deals:    'crm.deal.list',
+    leads:    'crm.lead.list',
+  };
+
+  const params = { select: SELECT_MAP[entity] || ['ID'] };
+  if (entity === 'deals' && funnelId) params.filter = { CATEGORY_ID: funnelId };
+
+  log(`Загрузка ${entity}...`, 'info');
+  setStatus('Загрузка записей...', 'busy');
+  setProgress(0, 'Загрузка записей...');
+
+  const records = await b24all(METHOD_MAP[entity], params, (loaded, total) => {
+    if (total) setProgress(Math.round(loaded / total * 60), `Загружено ${loaded} из ${total}`);
+    else       setProgress(null);
+  });
+
+  log(`Загружено ${records.length} записей`, 'ok');
+
+  // For deals: optionally load contact phones/emails
+  if (entity === 'deals') {
+    const checkedKeys = getCheckedKeys();
+    if (checkedKeys.includes('contact_phone') || checkedKeys.includes('contact_email')) {
+      log('Загрузка данных контактов для сделок...', 'info');
+      const contactIds = [...new Set(records.map(r => r.CONTACT_ID).filter(Boolean))];
+      setProgress(60, `Загрузка ${contactIds.length} контактов...`);
+      const contacts = {};
+      await batchMap(contactIds, async (cid) => {
+        try {
+          const cd = await b24('crm.contact.get', { id: cid });
+          if (cd.result) contacts[cid] = cd.result;
+        } catch { /* skip */ }
+      }, 8);
+      records.forEach(r => { if (r.CONTACT_ID) r._contact = contacts[r.CONTACT_ID]; });
+      log(`Контакты загружены: ${Object.keys(contacts).length}`, 'ok');
+    }
+  }
+
+  S.records = records;
+  setProgress(null);
+  return records;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// KEY EXTRACTION
+// ══════════════════════════════════════════════════════════════════════════════
+function getCheckedKeys() {
+  const map = { contacts:'kContacts', companies:'kCompanies', deals:'kDeals', leads:'kLeads' };
+  const panel = document.getElementById(map[S.entity]);
+  if (!panel) return [];
+  return [...panel.querySelectorAll('.check-item.checked')].map(el => el.dataset.key);
+}
+
+function getKeyValues(rec, key) {
+  switch (key) {
+    case 'phone':        return getPhones(rec);
+    case 'email':        return getEmails(rec);
+    case 'name':         return [normStr([rec.NAME, rec.LAST_NAME].filter(Boolean).join(' '))].filter(Boolean);
+    case 'title':        return [normStr(rec.TITLE)].filter(Boolean);
+    case 'contact_id':   return rec.CONTACT_ID ? [String(rec.CONTACT_ID)] : [];
+    case 'company_id':   return rec.COMPANY_ID ? [String(rec.COMPANY_ID)] : [];
+    case 'contact_phone':return rec._contact ? getPhones(rec._contact) : [];
+    case 'contact_email':return rec._contact ? getEmails(rec._contact) : [];
+    default:             return [];
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DETECT DUPLICATES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Union-Find for OR mode
+function detectOR(records, keys) {
+  const n      = records.length;
+  const parent = records.map((_, i) => i);
+  const rank   = new Array(n).fill(0);
+
+  function find(x) {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  }
+  function union(a, b) {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) return;
+    if (rank[ra] < rank[rb]) parent[ra] = rb;
+    else if (rank[ra] > rank[rb]) parent[rb] = ra;
+    else { parent[rb] = ra; rank[ra]++; }
+  }
+
+  for (const key of keys) {
+    const index = new Map();
+    records.forEach((rec, i) => {
+      getKeyValues(rec, key).forEach(val => {
+        if (!val) return;
+        if (!index.has(val)) index.set(val, []);
+        index.get(val).push(i);
+      });
+    });
+    index.forEach(group => {
+      for (let i = 1; i < group.length; i++) union(group[0], group[i]);
+    });
+  }
+
+  const clusters = new Map();
+  records.forEach((rec, i) => {
+    const root = find(i);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(rec);
+  });
+
+  return [...clusters.values()].filter(g => g.length >= 2);
+}
+
+// Clique search for AND mode
+function detectAND(records, keys) {
+  if (!keys.length) return [];
+  const [firstKey, ...restKeys] = keys;
+
+  // Build candidate pairs via first key
+  const index = new Map();
+  records.forEach((rec, i) => {
+    getKeyValues(rec, firstKey).forEach(val => {
+      if (!val) return;
+      if (!index.has(val)) index.set(val, []);
+      index.get(val).push(i);
+    });
+  });
+
+  const validPairs = new Set();
+  function pairKey(a, b) { return a < b ? `${a}:${b}` : `${b}:${a}`; }
+
+  index.forEach(group => {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i], b = group[j];
+        // Check all remaining keys
+        const ok = restKeys.every(key => {
+          const va = getKeyValues(records[a], key);
+          const vb = getKeyValues(records[b], key);
+          return va.some(v => vb.includes(v));
+        });
+        if (ok) validPairs.add(pairKey(a, b));
+      }
+    }
+  });
+
+  // Build adjacency
+  const adj = new Map();
+  validPairs.forEach(pk => {
+    const [a, b] = pk.split(':').map(Number);
+    if (!adj.has(a)) adj.set(a, new Set());
+    if (!adj.has(b)) adj.set(b, new Set());
+    adj.get(a).add(b);
+    adj.get(b).add(a);
+  });
+
+  // Extract cliques (greedy BFS)
+  const visited = new Set();
+  const cliques = [];
+
+  adj.forEach((_, node) => {
+    if (visited.has(node)) return;
+    const neighbors = adj.get(node);
+    const clique = [node];
+    neighbors.forEach(nb => {
+      if (visited.has(nb)) return;
+      const nbAdj = adj.get(nb) || new Set();
+      if (clique.every(c => c === node || nbAdj.has(c))) clique.push(nb);
+    });
+    if (clique.length >= 2) {
+      clique.forEach(n => visited.add(n));
+      cliques.push(clique.map(i => records[i]));
+    }
+  });
+
+  return cliques;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FIND DUPLICATES ORCHESTRATOR
+// ══════════════════════════════════════════════════════════════════════════════
+async function findDuplicates() {
+  const keys = getCheckedKeys();
+  if (!keys.length) { notify('Выберите хотя бы один ключ', 'warn'); return; }
+  if (!S.webhook)   { notify('Введите вебхук', 'warn'); return; }
+
+  document.getElementById('btnFind').disabled    = true;
+  document.getElementById('btnExecAll').disabled = true;
+  document.getElementById('btnExportCSV').disabled = true;
+  document.getElementById('btnExportJSON').disabled = true;
+  clearResults(false);
+
+  try {
+    await loadRecords();
+    log(`Анализ дублей (режим: ${S.matchMode}, ключи: ${keys.join(', ')})...`, 'info');
+    setProgress(80, 'Поиск дублей...');
+    setStatus('Анализ...', 'busy');
+
+    const groups = S.matchMode === 'AND'
+      ? detectAND(S.records, keys)
+      : detectOR(S.records, keys);
+
+    // Sort by master selection
+    groups.forEach(g => {
+      g.sort((a, b) => S.master === 'newest'
+        ? Number(b.ID) - Number(a.ID)
+        : Number(a.ID) - Number(b.ID));
+    });
+
+    S.groups = groups;
+    setProgress(null);
+    renderResults(groups);
+    log(`Найдено ${groups.length} групп дублей (${groups.reduce((s,g) => s+g.length, 0)} записей)`, groups.length ? 'warn' : 'ok');
+    setStatus(`Найдено ${groups.length} групп`, groups.length ? 'err' : 'ok');
+
+    document.getElementById('btnExecAll').disabled  = groups.length === 0;
+    document.getElementById('btnExportCSV').disabled = groups.length === 0;
+    document.getElementById('btnExportJSON').disabled = groups.length === 0;
+
+    if (groups.length > 500) {
+      notify(`Найдено ${groups.length} групп — AND-алгоритм может работать медленно при таком количестве`, 'warn');
+    }
+
+  } catch (err) {
+    log('Ошибка: ' + err.message, 'err');
+    setStatus('Ошибка', 'err');
+    notify(err.message, 'err');
+  } finally {
+    document.getElementById('btnFind').disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RENDER RESULTS
+// ══════════════════════════════════════════════════════════════════════════════
+function clearResults(showPlaceholder = true) {
+  const rw = document.getElementById('resultsWrap');
+  rw.innerHTML = '';
+  if (showPlaceholder) {
+    const ph = document.createElement('div');
+    ph.className = 'placeholder';
+    ph.innerHTML = '<div class="placeholder-icon">◈</div><div class="placeholder-text">Нет результатов</div>';
+    rw.appendChild(ph);
+  }
+}
+
+function recordDisplayName(rec) {
+  if (rec.TITLE) return rec.TITLE;
+  const parts = [rec.NAME, rec.LAST_NAME].filter(Boolean);
+  if (parts.length) return parts.join(' ');
+  return `#${rec.ID}`;
+}
+
+function recordMeta(rec) {
+  const phones = getPhones(rec);
+  const emails = getEmails(rec);
+  const parts  = [];
+  if (phones.length) parts.push('📞 ' + phones[0]);
+  if (emails.length) parts.push('✉ ' + emails[0]);
+  if (rec.DATE_CREATE) parts.push('🗓 ' + rec.DATE_CREATE.slice(0,10));
+  return parts.join('  ');
+}
+
+function renderResults(groups) {
+  const rw = document.getElementById('resultsWrap');
+  rw.innerHTML = '';
+
+  if (!groups.length) {
+    const ph = document.createElement('div');
+    ph.className = 'placeholder';
+    ph.innerHTML = '<div class="placeholder-icon">✓</div><div class="placeholder-text">Дублей не найдено</div>';
+    rw.appendChild(ph);
+    return;
+  }
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'results-header';
+  hdr.innerHTML = `
+    <div class="results-count">ГРУПП: ${groups.length} / ЗАПИСЕЙ: ${groups.reduce((s,g)=>s+g.length,0)}</div>
+    <div class="results-actions">
+      <button class="btn btn-ghost btn-sm" id="btnCollapseAll">Свернуть все</button>
+      <button class="btn btn-ghost btn-sm" id="btnExpandAll">Развернуть все</button>
+    </div>`;
+  rw.appendChild(hdr);
+
+  document.getElementById('btnCollapseAll').onclick = () =>
+    rw.querySelectorAll('.group-body').forEach(b => b.style.display = 'none');
+  document.getElementById('btnExpandAll').onclick = () =>
+    rw.querySelectorAll('.group-body').forEach(b => b.style.display = '');
+
+  groups.forEach((group, gi) => {
+    const master = group[0];
+    const dupes  = group.slice(1);
+
+    const card = document.createElement('div');
+    card.className = 'group-card';
+    card.dataset.gi = gi;
+
+    const actionLabel = { merge:'⊕ ВЛИТЬ', delete:'✕ УДАЛИТЬ', stage:'→ СТАДИЯ', field:'🏷 МЕТКА' }[S.action] || S.action;
+
+    card.innerHTML = `
+      <div class="group-header">
+        <span class="group-title">ГРУППА ${gi+1}</span>
+        <span class="group-count">${group.length} записей</span>
+        <div class="group-actions">
+          <button class="btn btn-warn btn-sm exec-btn" data-gi="${gi}">${actionLabel}</button>
+        </div>
+      </div>
+      <div class="group-body">
+        ${group.map((rec, ri) => `
+          <div class="record-row">
+            <div class="record-num ${ri === 0 ? 'master' : ''}">${ri === 0 ? '★' : ri}</div>
+            <div class="record-info">
+              <div class="record-name">${escHtml(recordDisplayName(rec))}</div>
+              <div class="record-meta">${escHtml(recordMeta(rec))}</div>
+            </div>
+            <div class="record-id"><a href="${recordLink(rec.ID)}" target="_blank">#${rec.ID}</a></div>
+          </div>
+        `).join('')}
+      </div>`;
+
+    rw.appendChild(card);
+
+    card.querySelector('.group-header').addEventListener('click', (e) => {
+      if (e.target.closest('.group-actions')) return;
+      const body = card.querySelector('.group-body');
+      body.style.display = body.style.display === 'none' ? '' : 'none';
+    });
+
+    card.querySelector('.exec-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      execGroup(gi, false);
+    });
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXECUTE ACTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+async function execGroup(gi, skipConfirm = false) {
+  const group = S.groups[gi];
+  if (!group) return;
+
+  const master = group[0];
+  const dupes  = group.slice(1);
+
+  if (!skipConfirm) {
+    const label = recordDisplayName(master);
+    if (!confirm(`Действие "${S.action}" над группой:\nОсновная: ${label} (#${master.ID})\nДублей: ${dupes.length}\n\nПродолжить?`)) return;
+  }
+
+  const card = document.querySelector(`.group-card[data-gi="${gi}"]`);
+  if (card) card.style.opacity = '.5';
+
+  try {
+    for (const dupe of dupes) {
+      await execSingle(master, dupe);
+    }
+    log(`Группа ${gi+1}: выполнено`, 'ok');
+    if (card) card.remove();
+    S.groups[gi] = null;
+    notify(`Группа ${gi+1} обработана`, 'ok');
+  } catch (err) {
+    log(`Группа ${gi+1} ошибка: ${err.message}`, 'err');
+    notify(`Ошибка: ${err.message}`, 'err');
+    if (card) card.style.opacity = '';
+  }
+}
+
+async function execAll() {
+  const activeGroups = S.groups.filter(Boolean);
+  if (!activeGroups.length) return;
+  if (!confirm(`Выполнить "${S.action}" для ${activeGroups.length} групп?\nЭто действие необратимо!`)) return;
+
+  document.getElementById('btnExecAll').disabled = true;
+  setStatus('Выполнение...', 'busy');
+  setProgress(0, 'Выполнение...');
+
+  let done = 0;
+  for (let gi = 0; gi < S.groups.length; gi++) {
+    if (!S.groups[gi]) continue;
+    await execGroup(gi, true);
+    done++;
+    setProgress(Math.round(done / activeGroups.length * 100), `Обработано ${done} из ${activeGroups.length}`);
+  }
+
+  setProgress(null);
+  setStatus('Готово', 'ok');
+  notify('Все группы обработаны', 'ok');
+}
+
+async function execSingle(master, dupe) {
+  switch (S.action) {
+    case 'merge':  return doMerge(master, dupe);
+    case 'delete': return doDelete(dupe);
+    case 'stage':  return doStage(dupe);
+    case 'field':  return doField(dupe);
+    default:       throw new Error('Неизвестное действие: ' + S.action);
+  }
+}
+
+// ── DELETE ──
+async function doDelete(dupe) {
+  const m = { contacts:'crm.contact.delete', companies:'crm.company.delete', deals:'crm.deal.delete', leads:'crm.lead.delete' };
+  await b24(m[S.entity], { id: dupe.ID });
+  log(`Удалён #${dupe.ID}`, 'warn');
+}
+
+// ── STAGE ──
+async function doStage(dupe) {
+  const stageId = document.getElementById('stageSelect').value;
+  if (!stageId) throw new Error('Выберите стадию');
+  const m = { deals:'crm.deal.update', leads:'crm.lead.update' };
+  const method = m[S.entity];
+  if (!method) throw new Error('Действие "Стадия" недоступно для ' + S.entity);
+  await b24(method, { id: dupe.ID, fields: { STAGE_ID: stageId, COMMENTS: 'DupeHunter: помечен как дубль' } });
+  log(`#${dupe.ID} → стадия ${stageId}`, 'warn');
+}
+
+// ── FIELD ──
+async function doField(dupe) {
+  const fieldName  = document.getElementById('fieldName').value.trim();
+  const fieldValue = document.getElementById('fieldValue').value.trim() || 'ДУБЛЬ';
+  if (!fieldName) throw new Error('Укажите имя поля');
+  const m = { contacts:'crm.contact.update', companies:'crm.company.update', deals:'crm.deal.update', leads:'crm.lead.update' };
+  await b24(m[S.entity], { id: dupe.ID, fields: { [fieldName]: fieldValue } });
+  log(`#${dupe.ID} → ${fieldName} = ${fieldValue}`, 'info');
+}
+
+// ── MERGE ──
+async function doMerge(master, dupe) {
+  const entity = S.entity;
+  if      (entity === 'contacts')  await mergeContacts(master, dupe);
+  else if (entity === 'companies') await mergeCompanies(master, dupe);
+  else if (entity === 'deals')     await mergeDeals(master, dupe);
+  else if (entity === 'leads')     await mergeLeads(master, dupe);
+}
+
+// ── MERGE: Contacts ──
+async function mergeContacts(master, dupe) {
+  const [md, dd] = await Promise.all([
+    b24('crm.contact.get', { id: master.ID }),
+    b24('crm.contact.get', { id: dupe.ID }),
+  ]);
+  const m = md.result, d = dd.result;
+
+  // Merge phones and emails
+  const phones = mergeMultifield(m.PHONE, d.PHONE);
+  const emails = mergeMultifield(m.EMAIL, d.EMAIL);
+
+  // Reassign deals and leads from dupe to master
+  const dupeDeals = await b24all('crm.deal.list', { filter: { CONTACT_ID: dupe.ID }, select: ['ID'] });
+  const dupeLeads = await b24all('crm.lead.list', { filter: { CONTACT_ID: dupe.ID }, select: ['ID'] });
+
+  await Promise.all([
+    ...dupeDeals.map(dl => b24('crm.deal.update', { id: dl.ID, fields: { CONTACT_ID: master.ID } })),
+    ...dupeLeads.map(ld => b24('crm.lead.update', { id: ld.ID, fields: { CONTACT_ID: master.ID } })),
+  ]);
+
+  // Update master
+  await b24('crm.contact.update', { id: master.ID, fields: { PHONE: phones, EMAIL: emails } });
+
+  // Delete dupe
+  await b24('crm.contact.delete', { id: dupe.ID });
+  log(`Контакт #${dupe.ID} влит в #${master.ID}`, 'ok');
+}
+
+// ── MERGE: Companies (полный перенос всех полей) ──
+async function mergeCompanies(master, dupe) {
+  const [md, dd] = await Promise.all([
+    b24('crm.company.get', { id: master.ID }),
+    b24('crm.company.get', { id: dupe.ID }),
+  ]);
+  const m = md.result, d = dd.result;
+
+  // Fields to merge: overwrite master if master is empty, use dupe value
+  const SKIP_FIELDS = new Set(['ID','DATE_CREATE','DATE_MODIFY','CREATED_BY_ID','MODIFY_BY_ID',
+                                'LEAD_ID','CONTACT_ID','IS_MY_COMPANY','LOGO']);
+  const MULTI_FIELDS = { PHONE: true, EMAIL: true, WEB: true, IM: true };
+
+  const updatedFields = {};
+  const changeLog     = [];
+
+  for (const [key, dupeVal] of Object.entries(d)) {
+    if (SKIP_FIELDS.has(key)) continue;
+    if (!dupeVal && dupeVal !== 0) continue;
+
+    if (MULTI_FIELDS[key]) {
+      // Merge multifields (phone/email/web/im)
+      const merged = mergeMultifield(m[key], d[key]);
+      if (JSON.stringify(merged) !== JSON.stringify(m[key])) {
+        updatedFields[key] = merged;
+        const addedVals = (d[key] || []).map(v => v.VALUE).filter(v => !(m[key] || []).some(mv => mv.VALUE === v));
+        if (addedVals.length) changeLog.push(`${key}: добавлено ${addedVals.join(', ')}`);
+      }
+      continue;
+    }
+
+    const masterVal = m[key];
+    const isEmpty   = masterVal === null || masterVal === undefined || masterVal === '' ||
+                      (Array.isArray(masterVal) && masterVal.length === 0);
+
+    if (!isEmpty) {
+      // Master has value — overwrite with dupe if dupe is different
+      if (String(masterVal) !== String(dupeVal)) {
+        updatedFields[key] = dupeVal;
+        changeLog.push(`${key}: [${masterVal}] → [${dupeVal}]`);
+      }
+    } else {
+      // Master empty — fill from dupe
+      updatedFields[key] = dupeVal;
+      changeLog.push(`${key}: заполнено [${dupeVal}]`);
+    }
+  }
+
+  // Apply field updates to master
+  if (Object.keys(updatedFields).length) {
+    await b24('crm.company.update', { id: master.ID, fields: updatedFields });
+  }
+
+  // Reassign all contacts of dupe company to master
+  let dupeContacts = [];
+  try {
+    const cc = await b24('crm.company.contact.items.get', { id: dupe.ID });
+    dupeContacts = Array.isArray(cc.result) ? cc.result : [];
+  } catch { /* may not exist */ }
+
+  if (dupeContacts.length) {
+    await Promise.all(dupeContacts.map(c =>
+      b24('crm.company.contact.add', { id: master.ID, fields: { CONTACT_ID: c.CONTACT_ID, SORT: c.SORT || 10, IS_PRIMARY: c.IS_PRIMARY || 'N' } })
+    ));
+    changeLog.push(`Контакты: перенесено ${dupeContacts.length} шт.`);
+  }
+
+  // Reassign deals
+  const dupeDeals = await b24all('crm.deal.list', { filter: { COMPANY_ID: dupe.ID }, select: ['ID'] });
+  if (dupeDeals.length) {
+    await Promise.all(dupeDeals.map(dl => b24('crm.deal.update', { id: dl.ID, fields: { COMPANY_ID: master.ID } })));
+    changeLog.push(`Сделки: перенесено ${dupeDeals.length} шт.`);
+  }
+
+  // Add comment to master with changelog
+  if (changeLog.length) {
+    const commentText = `DupeHunter: влита компания #${dupe.ID} (${d.TITLE || '—'})\n\nИзменения:\n` +
+                        changeLog.map(l => '• ' + l).join('\n');
+    try {
+      await b24('crm.timeline.comment.add', {
+        fields: {
+          ENTITY_TYPE: 'company',
+          ENTITY_ID: master.ID,
+          COMMENT: commentText,
+        }
+      });
+    } catch {
+      // Fallback: try crm.activity.add
+      try {
+        await b24('crm.activity.add', {
+          fields: {
+            OWNER_TYPE_ID: 4, // company
+            OWNER_ID: master.ID,
+            TYPE_ID: 6, // comment
+            SUBJECT: `DupeHunter: влита компания #${dupe.ID}`,
+            DESCRIPTION: commentText,
+            COMPLETED: 'Y',
+          }
+        });
+      } catch { /* best effort */ }
+    }
+    log(`Компания #${dupe.ID}: ${changeLog.length} изменений занесено в лог`, 'info');
+  }
+
+  // Delete dupe
+  await b24('crm.company.delete', { id: dupe.ID });
+  log(`Компания #${dupe.ID} влита в #${master.ID}`, 'ok');
+}
+
+// ── MERGE: Deals ──
+async function mergeDeals(master, dupe) {
+  // Reassign activities
+  const acts = await b24all('crm.activity.list', {
+    filter: { OWNER_TYPE_ID: 2, OWNER_ID: dupe.ID },
+    select: ['ID']
+  });
+  await Promise.all(acts.map(a => b24('crm.activity.update', { id: a.ID, fields: { OWNER_ID: master.ID } })));
+
+  await b24('crm.deal.delete', { id: dupe.ID });
+  log(`Сделка #${dupe.ID} влита в #${master.ID} (${acts.length} активностей перенесено)`, 'ok');
+}
+
+// ── MERGE: Leads ──
+async function mergeLeads(master, dupe) {
+  const [md, dd] = await Promise.all([
+    b24('crm.lead.get', { id: master.ID }),
+    b24('crm.lead.get', { id: dupe.ID }),
+  ]);
+  const m = md.result, d = dd.result;
+
+  const phones = mergeMultifield(m.PHONE, d.PHONE);
+  const emails = mergeMultifield(m.EMAIL, d.EMAIL);
+
+  // Reassign activities
+  const acts = await b24all('crm.activity.list', {
+    filter: { OWNER_TYPE_ID: 1, OWNER_ID: dupe.ID },
+    select: ['ID']
+  });
+  await Promise.all(acts.map(a => b24('crm.activity.update', { id: a.ID, fields: { OWNER_ID: master.ID } })));
+
+  await b24('crm.lead.update', { id: master.ID, fields: { PHONE: phones, EMAIL: emails } });
+  await b24('crm.lead.delete', { id: dupe.ID });
+  log(`Лид #${dupe.ID} влит в #${master.ID}`, 'ok');
+}
+
+// ── Merge multifield arrays (phone/email/web/im) ──
+// Returns master values + unique values from dupe
+function mergeMultifield(masterArr, dupeArr) {
+  const result = Array.isArray(masterArr) ? [...masterArr] : [];
+  const existingVals = new Set(result.map(v => (v.VALUE || '').toLowerCase()));
+  for (const item of (dupeArr || [])) {
+    const val = (item.VALUE || '').toLowerCase();
+    if (val && !existingVals.has(val)) {
+      result.push({ ...item, ID: undefined }); // remove ID so B24 creates new entry
+      existingVals.add(val);
+    }
+  }
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FIELD TEST
+// ══════════════════════════════════════════════════════════════════════════════
+async function testField() {
+  const fn = document.getElementById('fieldName').value.trim();
+  if (!fn) { notify('Введите имя поля', 'warn'); return; }
+  if (!S.webhook) { notify('Введите вебхук', 'warn'); return; }
+  try {
+    const m = { contacts:'crm.contact.fields', companies:'crm.company.fields', deals:'crm.deal.fields', leads:'crm.lead.fields' };
+    const fd = await b24(m[S.entity], {});
+    const fields = fd.result || {};
+    if (fields[fn]) {
+      notify(`Поле "${fn}" найдено: ${fields[fn].title || '—'}`, 'ok');
+    } else {
+      notify(`Поле "${fn}" не найдено в ${S.entity}`, 'err');
+    }
+  } catch (e) {
+    notify(e.message, 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+function exportCSV() {
+  const groups = S.groups.filter(Boolean);
+  if (!groups.length) return;
+  const rows = [['Группа','Роль','ID','Имя/Название','Телефон','Email','Дата создания']];
+  groups.forEach((g, gi) => {
+    g.forEach((rec, ri) => {
+      rows.push([
+        gi+1,
+        ri === 0 ? 'Основная' : 'Дубль',
+        rec.ID,
+        recordDisplayName(rec),
+        getPhones(rec).join('; '),
+        getEmails(rec).join('; '),
+        (rec.DATE_CREATE || '').slice(0,10),
+      ]);
+    });
+  });
+  const bom  = '\uFEFF';
+  const csv  = bom + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  downloadBlob(csv, 'dupehunter_results.csv', 'text/csv;charset=utf-8');
+}
+
+function exportJSON() {
+  const groups = S.groups.filter(Boolean);
+  if (!groups.length) return;
+  const data = groups.map((g, gi) => ({
+    group: gi+1,
+    master: g[0],
+    duplicates: g.slice(1),
+  }));
+  downloadBlob(JSON.stringify(data, null, 2), 'dupehunter_results.json', 'application/json');
+}
+
+function downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UI WIRING
+// ══════════════════════════════════════════════════════════════════════════════
+function updateActionUI() {
+  document.querySelectorAll('.action-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.action === S.action);
+  });
+  document.getElementById('subStage').classList.toggle('hidden', S.action !== 'stage');
+  document.getElementById('subField').classList.toggle('hidden', S.action !== 'field');
+}
+
+function init() {
+  // Tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchEntity(btn.dataset.entity));
+  });
+
+  // Webhook load
+  document.getElementById('btnLoad').addEventListener('click', async () => {
+    const wh = document.getElementById('webhookInput').value.trim();
+    if (!wh.startsWith('http') || !wh.includes('/rest/')) {
+      notify('Некорректный вебхук. Формат: https://domain/rest/USER_ID/TOKEN/', 'err');
+      return;
+    }
+    S.webhook = wh;
+    S.portalDomain = extractDomain(wh);
+    document.getElementById('btnLoad').disabled = true;
+    try {
+      await loadPortal();
+    } catch (e) {
+      log('Ошибка загрузки портала: ' + e.message, 'err');
+      notify(e.message, 'err');
+    } finally {
+      document.getElementById('btnLoad').disabled = false;
+    }
+  });
+
+  // Webhook input: Enter key
+  document.getElementById('webhookInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnLoad').click();
+  });
+
+  // Find button
+  document.getElementById('btnFind').addEventListener('click', findDuplicates);
+
+  // Exec all
+  document.getElementById('btnExecAll').addEventListener('click', execAll);
+
+  // Export
+  document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
+  document.getElementById('btnExportJSON').addEventListener('click', exportJSON);
+
+  // Field test
+  document.getElementById('btnTestField').addEventListener('click', testField);
+
+  // Action items
+  document.querySelectorAll('.action-item').forEach(el => {
+    el.addEventListener('click', () => {
+      S.action = el.dataset.action;
+      updateActionUI();
+    });
+  });
+
+  // Check items
+  document.querySelectorAll('.check-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      el.classList.toggle('checked');
+      const cb  = el.querySelector('input[type=checkbox]');
+      const box = el.querySelector('.check-box');
+      cb.checked = el.classList.contains('checked');
+      box.textContent = cb.checked ? '✓' : '';
+    });
+  });
+
+  // Mode toggle
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      S.matchMode = btn.dataset.mode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('modeHint').textContent = S.matchMode === 'OR'
+        ? 'Дубль = совпадение хотя бы по одному ключу'
+        : 'Дубль = совпадение по ВСЕМ ключам у каждой пары';
+    });
+  });
+
+  // Master select
+  document.getElementById('masterSelect').addEventListener('change', e => { S.master = e.target.value; });
+
+  // Funnel select → update stages
+  document.getElementById('funnelSelect').addEventListener('change', e => {
+    populateStageSelect(e.target.value);
+  });
+
+  // Initial action UI
+  updateActionUI();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
