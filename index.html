@@ -227,22 +227,23 @@ select option { background: var(--panel2); }
 .record-id a:hover { text-decoration: underline; }
 .record-btns { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; }
 
-/* ── Per-dupe action dropdown ── */
+/* ── Per-dupe action dropdown (portal in body, fixed pos) ── */
 .dupe-actions-wrap { position: relative; display: inline-flex; }
-.dupe-menu {
-  position: absolute; right: 0; top: 100%; margin-top: 4px;
-  background: var(--panel2); border: 1px solid var(--border);
-  border-radius: var(--radius); z-index: 100; min-width: 140px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-  display: none;
+#dupeMenuPortal {
+  position: fixed; z-index: 9998;
+  background: var(--panel2); border: 1px solid var(--accent4);
+  border-radius: var(--radius); min-width: 190px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.85);
+  display: none; padding: 4px 0;
 }
-.dupe-menu.open { display: block; }
+#dupeMenuPortal.open { display: block; }
 .dupe-menu-item {
-  padding: 8px 12px; font-family: var(--font-mono); font-size: 12px;
+  padding: 9px 14px; font-family: var(--font-mono); font-size: 13px;
   cursor: pointer; transition: background .1s; display: block; width: 100%;
-  background: none; border: none; text-align: left; color: var(--text-dim);
+  background: none; border: none; text-align: left;
+  white-space: nowrap;
 }
-.dupe-menu-item:hover { background: rgba(79,255,176,0.06); color: var(--text); }
+.dupe-menu-item:hover { background: rgba(79,255,176,0.08); }
 .dupe-menu-item.m-merge  { color: var(--accent); }
 .dupe-menu-item.m-delete { color: var(--accent2); }
 .dupe-menu-item.m-stage  { color: var(--accent3); }
@@ -421,6 +422,8 @@ select option { background: var(--panel2); }
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
+<!-- Portal for dupe action dropdown (fixed position, outside overflow containers) -->
+<div id="dupeMenuPortal"></div>
 
 <script>
 'use strict';
@@ -498,13 +501,90 @@ function recordLink(id) {
 }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// Close all open dupe menus
-function closeAllMenus() { document.querySelectorAll('.dupe-menu.open').forEach(m => m.classList.remove('open')); }
-document.addEventListener('click', closeAllMenus);
+// ── Portal menu (single instance, repositioned on open) ──
+const _portal = { gi: null, dupeIdx: null };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// API
-// ══════════════════════════════════════════════════════════════════════════════
+function initDupeMenuPortal() {
+  const portal = document.getElementById('dupeMenuPortal');
+  const actions = [
+    { key:'merge',  label:'⊕ Влить в основную',  cls:'m-merge' },
+    { key:'delete', label:'✕ Удалить дубль',       cls:'m-delete' },
+    { key:'stage',  label:'→ Поставить в стадию', cls:'m-stage' },
+    { key:'field',  label:'🏷 Поставить метку',    cls:'m-field' },
+  ];
+  portal.innerHTML = '';
+  actions.forEach(({ key, label, cls }) => {
+    const item = document.createElement('button');
+    item.className = `dupe-menu-item ${cls}`;
+    item.dataset.action = key;
+    item.textContent = label;
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const gi = _portal.gi, idx = _portal.dupeIdx;
+      closeAllMenus();
+      const entity = S.entity;
+      if (key === 'stage' && entity !== 'deals' && entity !== 'leads') {
+        notify('Стадия доступна только для сделок и лидов', 'warn'); return;
+      }
+      execDupeSingle(gi, idx, key);
+    });
+    portal.appendChild(item);
+  });
+
+  document.addEventListener('click', closeAllMenus);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllMenus(); });
+}
+
+// Строит кнопку-триггер для дубля
+function buildDupeMenu(gi, dupeIdx) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dupe-actions-wrap';
+
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-ghost btn-sm';
+  btn.style.cssText = 'font-size:11px; padding:4px 8px; letter-spacing:0; color:var(--accent4); border-color:var(--accent4);';
+  btn.textContent = '▾ действие';
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const portal  = document.getElementById('dupeMenuPortal');
+    const wasOpen = portal.classList.contains('open') && _portal.gi === gi && _portal.dupeIdx === dupeIdx;
+    closeAllMenus();
+    if (wasOpen) return;
+
+    _portal.gi = gi;
+    _portal.dupeIdx = dupeIdx;
+
+    // Position portal near button
+    const rect = btn.getBoundingClientRect();
+    const menuH = 160; // approx height
+    const spaceBelow = window.innerHeight - rect.bottom;
+    let top = spaceBelow > menuH ? rect.bottom + 4 : rect.top - menuH - 4;
+    let left = rect.right - 192; // align right edge
+    if (left < 8) left = 8;
+
+    portal.style.top  = top  + 'px';
+    portal.style.left = left + 'px';
+
+    // Hide stage option if not applicable
+    portal.querySelectorAll('.dupe-menu-item').forEach(item => {
+      if (item.dataset.action === 'stage') {
+        item.style.display = (S.entity === 'deals' || S.entity === 'leads') ? '' : 'none';
+      }
+    });
+
+    portal.classList.add('open');
+  });
+
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function closeAllMenus() {
+  const p = document.getElementById('dupeMenuPortal');
+  if (p) p.classList.remove('open');
+}
+
 async function b24(method, params = {}) {
   const res = await fetch('/b24proxy', {
     method: 'POST',
@@ -547,58 +627,83 @@ async function loadPortal() {
   log('Загрузка портала...', 'info');
   setStatus('Загрузка...', 'busy');
 
-  // 1. Воронки сделок
+  // 1. Воронки сделок — crm.category.list возвращает result напрямую (массив)
+  //    или result.categories — проверяем оба варианта
   try {
     const fd = await b24('crm.category.list', { entityTypeId: 2 });
-    S.funnels = Array.isArray(fd.result?.categories) ? fd.result.categories : [];
-  } catch { S.funnels = []; }
-
-  // 2. Все стадии из Битрикса (crm.status.list — полный список)
-  let allStatuses = [];
-  try {
-    const sd = await b24('crm.status.list', {});
-    allStatuses = Array.isArray(sd.result) ? sd.result : [];
-  } catch {}
-
-  // 3. Стадии лидов
-  const leadStages = allStatuses.filter(s => s.ENTITY_ID === 'STATUS');
-  S.stagesByFunnel['leads'] = leadStages;
-
-  // 4. Стадии сделок по воронкам
-  // Общая воронка: ENTITY_ID = 'DEAL_STAGE'
-  const generalDealStages = allStatuses.filter(s => s.ENTITY_ID === 'DEAL_STAGE');
-  S.stagesByFunnel = { '': generalDealStages };
-
-  for (const f of S.funnels) {
-    const fid = f.ID;
-    const fStages = allStatuses.filter(s =>
-      s.ENTITY_ID === `DEAL_STAGE_C${fid}` ||
-      (s.STATUS_ID && s.STATUS_ID.startsWith(`C${fid}:`))
-    );
-    S.stagesByFunnel[fid] = fStages.length ? fStages : generalDealStages;
+    const raw = fd.result;
+    if (Array.isArray(raw)) {
+      S.funnels = raw;
+    } else if (raw && Array.isArray(raw.categories)) {
+      S.funnels = raw.categories;
+    } else if (raw && typeof raw === 'object') {
+      // Иногда приходит объект { "0": {...}, "1": {...} }
+      S.funnels = Object.values(raw).filter(v => v && typeof v === 'object' && v.ID !== undefined);
+    } else {
+      S.funnels = [];
+    }
+    log(`Воронки raw тип: ${Array.isArray(fd.result)?'array':typeof fd.result}, найдено: ${S.funnels.length}`, 'info');
+  } catch (e) {
+    log('Ошибка загрузки воронок: ' + e.message, 'err');
+    S.funnels = [];
   }
 
-  // 5. Заполняем select воронок
+  // 2. Стадии для каждой воронки через crm.dealcategory.stages
+  //    Это правильный метод — crm.status.list не возвращает стадии кастомных воронок
+  S.stagesByFunnel = {};
+
+  // Общая воронка (без категории, id=0)
+  try {
+    const gd = await b24('crm.dealcategory.stages', { id: 0 });
+    S.stagesByFunnel[''] = Array.isArray(gd.result) ? gd.result : [];
+    log(`Общая воронка: ${S.stagesByFunnel[''].length} стадий`, 'info');
+  } catch {
+    // Fallback через status.list
+    try {
+      const sd = await b24('crm.status.list', { filter: { ENTITY_ID: 'DEAL_STAGE' } });
+      S.stagesByFunnel[''] = Array.isArray(sd.result) ? sd.result : [];
+    } catch { S.stagesByFunnel[''] = []; }
+  }
+
+  // Кастомные воронки
+  for (const f of S.funnels) {
+    const fid = String(f.ID);
+    try {
+      const fd2 = await b24('crm.dealcategory.stages', { id: fid });
+      S.stagesByFunnel[fid] = Array.isArray(fd2.result) ? fd2.result : [];
+      log(`Воронка "${f.NAME}" (id=${fid}): ${S.stagesByFunnel[fid].length} стадий`, 'info');
+    } catch {
+      S.stagesByFunnel[fid] = S.stagesByFunnel[''];
+    }
+  }
+
+  // 3. Стадии лидов
+  try {
+    const ld = await b24('crm.status.list', { filter: { ENTITY_ID: 'STATUS' } });
+    S.stagesByFunnel['leads'] = Array.isArray(ld.result) ? ld.result : [];
+  } catch { S.stagesByFunnel['leads'] = []; }
+
+  // 4. Заполняем select воронок
   const fs = document.getElementById('funnelSelect');
-  fs.innerHTML = '<option value="">Все воронки</option>';
+  fs.innerHTML = '<option value="">Все воронки (общая)</option>';
   S.funnels.forEach(f => {
     const o = document.createElement('option');
-    o.value = f.ID;
+    o.value = String(f.ID);
     o.textContent = f.NAME || `Воронка #${f.ID}`;
     fs.appendChild(o);
   });
 
-  // 6. Стадии select — по текущей воронке / сущности
+  // 5. Стадии select
   populateStageSelect();
 
-  // 7. Поля компаний (для читаемых названий в changelog)
+  // 6. Поля компаний (для читаемых названий в changelog)
   try {
     const cf = await b24('crm.company.fields', {});
     S.companyFields = cf.result || {};
   } catch { S.companyFields = {}; }
 
-  const total = Object.values(S.stagesByFunnel).reduce((s, a) => s + a.length, 0);
-  log(`Загружено ${S.funnels.length} воронок, стадий deal: ${total}, lead: ${leadStages.length}`, 'ok');
+  const totalStages = Object.values(S.stagesByFunnel).reduce((s, a) => s + a.length, 0);
+  log(`Загружено: ${S.funnels.length} воронок, ${totalStages} стадий всего, ${S.stagesByFunnel['leads'].length} статусов лидов`, 'ok');
   setStatus('Портал загружен', 'ok');
 }
 
@@ -609,20 +714,20 @@ function populateStageSelect(funnelId = '') {
 
   let stages = [];
   if (entity === 'leads') {
-    // Для лидов — статусы лидов
-    try {
-      // Они уже в allStatuses под ENTITY_ID='STATUS', но мы храним их отдельно
-      // Просто берём из stagesByFunnel под ключом 'leads' если есть
-      stages = S.stagesByFunnel['leads'] || [];
-    } catch {}
+    stages = S.stagesByFunnel['leads'] || [];
   } else {
-    stages = S.stagesByFunnel[funnelId] || S.stagesByFunnel[''] || [];
+    const key = funnelId ? String(funnelId) : '';
+    stages = S.stagesByFunnel[key] || S.stagesByFunnel[''] || [];
   }
 
   stages.forEach(s => {
     const o = document.createElement('option');
-    o.value = s.STATUS_ID;
-    o.textContent = `${s.NAME} [${s.STATUS_ID}]`;
+    // crm.dealcategory.stages: STATUS_ID + NAME
+    // crm.status.list: STATUS_ID + NAME
+    const sid  = s.STATUS_ID || s.ID || '';
+    const name = s.NAME || s.name || sid;
+    o.value = sid;
+    o.textContent = sid ? `${name} [${sid}]` : name;
     ss.appendChild(o);
   });
 }
@@ -681,8 +786,10 @@ async function loadRecords() {
   };
 
   const params = { select: SELECT_MAP[entity] || ['ID'] };
-  // fix #1: фильтрация сделок по воронке на стороне API
-  if (entity === 'deals' && funnelId) params.filter = { CATEGORY_ID: funnelId };
+  // fix: фильтрация сделок по воронке — CATEGORY_ID должен быть числом
+  if (entity === 'deals' && funnelId) {
+    params.filter = { CATEGORY_ID: Number(funnelId) };
+  }
 
   log(`Загрузка ${entity}${entity === 'deals' && funnelId ? ` (воронка ${funnelId})` : ''}...`, 'info');
   setStatus('Загрузка записей...', 'busy');
@@ -700,26 +807,25 @@ async function loadRecords() {
     if (keys.includes('bin')) {
       log('Загрузка реквизитов компаний (БИН)...', 'info');
       setProgress(60, 'Загрузка реквизитов...');
-      const ids = records.map(r => r.ID);
       const reqMap = {};
-      // batch по 20 — crm.requisite.list принимает filter с OR через ENTITY_ID
-      for (let i = 0; i < ids.length; i += 50) {
-        const batch = ids.slice(i, i + 50);
-        try {
-          const rd = await b24all('crm.requisite.list', {
-            filter: { ENTITY_TYPE_ID: 4, ENTITY_ID: batch },
-            select: ['ID','ENTITY_ID','RQ_COMPANY_ID_NUMBER','RQ_INN','NAME','PRESET_ID'],
-          });
-          rd.forEach(r => {
-            const eid = String(r.ENTITY_ID);
-            if (!reqMap[eid]) reqMap[eid] = [];
-            reqMap[eid].push(r);
-          });
-        } catch { /* skip */ }
-        setProgress(60 + Math.round((i / ids.length) * 20), `Реквизиты ${Math.min(i+50, ids.length)} из ${ids.length}`);
+      // crm.requisite.list с фильтром по ENTITY_TYPE_ID=4 (company) — берём все, затем маппируем
+      try {
+        const allReqs = await b24all('crm.requisite.list', {
+          filter: { ENTITY_TYPE_ID: 4 },
+          select: ['ID','ENTITY_ID','RQ_COMPANY_ID_NUMBER','RQ_INN','NAME','PRESET_ID'],
+        }, (loaded) => {
+          setProgress(60 + Math.min(15, Math.round(loaded / 500 * 15)), `Реквизиты: ${loaded}...`);
+        });
+        allReqs.forEach(r => {
+          const eid = String(r.ENTITY_ID);
+          if (!reqMap[eid]) reqMap[eid] = [];
+          reqMap[eid].push(r);
+        });
+        log(`Реквизиты загружены: ${allReqs.length} записей для ${Object.keys(reqMap).length} компаний`, 'ok');
+      } catch (e) {
+        log('Ошибка загрузки реквизитов: ' + e.message, 'err');
       }
       records.forEach(r => { r._requisites = reqMap[String(r.ID)] || []; });
-      log(`Реквизиты загружены для ${Object.keys(reqMap).length} компаний`, 'ok');
     }
   }
 
@@ -1029,8 +1135,10 @@ function renderResults(groups) {
   document.getElementById('btnExpandAll').onclick = () =>
     rw.querySelectorAll('.group-body').forEach(b => b.style.display = '');
 
-  const actionLabel = { merge:'⊕ ВЛИТЬ ВСЕ', delete:'✕ УДАЛИТЬ ВСЕ', stage:'→ СТАДИЯ ВСЕ', field:'🏷 МЕТКА ВСЕ' }[S.action] || S.action;
-  const actionBtnCls = { merge:'btn-merge', delete:'btn-delete', stage:'btn-stage', field:'btn-field' }[S.action] || 'btn-ghost';
+  const ACTION_LABELS = { merge:'⊕ Влить всё', delete:'✕ Удалить всё', stage:'→ Стадия всем', field:'🏷 Метка всем' };
+  const ACTION_CLSS  = { merge:'btn-merge', delete:'btn-delete', stage:'btn-stage', field:'btn-field' };
+  const actionLabel  = ACTION_LABELS[S.action] || S.action;
+  const actionBtnCls = ACTION_CLSS[S.action] || 'btn-ghost';
 
   groups.forEach((group, gi) => {
     const master = group[0];
@@ -1052,7 +1160,7 @@ function renderResults(groups) {
     const execBtn = document.createElement('button');
     execBtn.className = `btn btn-sm ${actionBtnCls}`;
     execBtn.textContent = actionLabel;
-    execBtn.style.fontSize = '6px';
+    execBtn.style.cssText = 'font-size:11px; letter-spacing:0; padding:4px 10px;';
     execBtn.addEventListener('click', (e) => { e.stopPropagation(); execGroup(gi, false); });
     gacts.appendChild(execBtn);
     ghdr.appendChild(gacts);
@@ -1170,7 +1278,7 @@ function buildGroupCard(gi, group) {
   card.className = 'group-card';
   card.dataset.gi = gi;
 
-  const actionLabel = { merge:'⊕ ВЛИТЬ ВСЕ', delete:'✕ УДАЛИТЬ ВСЕ', stage:'→ СТАДИЯ ВСЕ', field:'🏷 МЕТКА ВСЕ' }[S.action] || S.action;
+  const actionLabel  = { merge:'⊕ Влить всё', delete:'✕ Удалить всё', stage:'→ Стадия всем', field:'🏷 Метка всем' }[S.action] || S.action;
   const actionBtnCls = { merge:'btn-merge', delete:'btn-delete', stage:'btn-stage', field:'btn-field' }[S.action] || 'btn-ghost';
 
   const ghdr = document.createElement('div');
@@ -1181,7 +1289,7 @@ function buildGroupCard(gi, group) {
   const execBtn = document.createElement('button');
   execBtn.className = `btn btn-sm ${actionBtnCls}`;
   execBtn.textContent = actionLabel;
-  execBtn.style.fontSize = '6px';
+  execBtn.style.cssText = 'font-size:11px; letter-spacing:0; padding:4px 10px;';
   execBtn.addEventListener('click', (e) => { e.stopPropagation(); execGroup(gi, false); });
   gacts.appendChild(execBtn);
   ghdr.appendChild(gacts);
@@ -1667,6 +1775,7 @@ function updateActionUI() {
 }
 
 function init() {
+  initDupeMenuPortal();
   document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchEntity(btn.dataset.entity)));
 
   document.getElementById('btnLoad').addEventListener('click', async () => {
