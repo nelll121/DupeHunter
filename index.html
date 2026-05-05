@@ -327,6 +327,7 @@ select option { background: var(--panel2); }
       <label class="check-item" data-key="phone"><input type="checkbox"><div class="check-box"></div><span class="check-label">Телефон</span></label>
       <label class="check-item" data-key="email"><input type="checkbox"><div class="check-box"></div><span class="check-label">Email</span></label>
       <label class="check-item" data-key="bin"><input type="checkbox"><div class="check-box"></div><span class="check-label">БИН (реквизиты)</span></label>
+      <button class="btn btn-ghost btn-sm" id="btnDiagReq" style="margin-top:6px;font-size:10px;letter-spacing:0;padding:5px 8px;width:100%;">🔧 Диагностика реквизитов</button>
     </div>
 
     <div id="kDeals" class="check-list" style="display:none;">
@@ -480,15 +481,23 @@ function setProgress(pct, msg) {
   if (msg) document.getElementById('progressText').textContent = msg;
 }
 
-function normPhone(raw) {
+function normStr(s) {
+  if (!s) return '';
+  return String(s).toLowerCase().trim().replace(/\s+/g, ' ');
+}
   if (!raw) return '';
   const digits = String(raw).replace(/\D/g, '');
   if (digits.length === 11 && digits[0] === '8') return '7' + digits.slice(1);
   return digits;
 }
-function normStr(s) {
+// Таблица транслитерации кириллица→латиница (для сравнения смешанных записей)
+const TRANSLIT = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+function cyrToLat(s) { return s.split('').map(c => TRANSLIT[c] || c).join(''); }
+function normName(s) {
   if (!s) return '';
-  return String(s).toLowerCase().trim().replace(/\s+/g, ' ');
+  const lower = s.toLowerCase().trim().replace(/\s+/g, ' ');
+  // Если содержит кириллицу — транслитерируем для сравнения
+  return /[а-яёА-ЯЁ]/.test(lower) ? cyrToLat(lower) : lower;
 }
 function getPhones(rec) { return (rec.PHONE || []).map(p => normPhone(p.VALUE)).filter(Boolean); }
 function getEmails(rec) { return (rec.EMAIL || []).map(e => (e.VALUE || '').toLowerCase().trim()).filter(Boolean); }
@@ -627,38 +636,45 @@ async function loadPortal() {
   log('Загрузка портала...', 'info');
   setStatus('Загрузка...', 'busy');
 
-  // 1. Воронки сделок — crm.category.list возвращает result напрямую (массив)
-  //    или result.categories — проверяем оба варианта
+  // 1. Воронки сделок
+  // crm.category.list возвращает { result: { categories: [...] } } или { result: [...] }
+  // Поля могут быть lowercase: id, name — нормализуем
   try {
     const fd = await b24('crm.category.list', { entityTypeId: 2 });
     const raw = fd.result;
+    let arr = [];
     if (Array.isArray(raw)) {
-      S.funnels = raw;
+      arr = raw;
     } else if (raw && Array.isArray(raw.categories)) {
-      S.funnels = raw.categories;
+      arr = raw.categories;
     } else if (raw && typeof raw === 'object') {
-      // Иногда приходит объект { "0": {...}, "1": {...} }
-      S.funnels = Object.values(raw).filter(v => v && typeof v === 'object' && v.ID !== undefined);
-    } else {
-      S.funnels = [];
+      arr = Object.values(raw).filter(v => v && typeof v === 'object');
     }
-    log(`Воронки raw тип: ${Array.isArray(fd.result)?'array':typeof fd.result}, найдено: ${S.funnels.length}`, 'info');
+    // Нормализуем: поля могут быть ID/id, NAME/name
+    S.funnels = arr.map(f => ({
+      ID:   String(f.ID   ?? f.id   ?? ''),
+      NAME: f.NAME ?? f.name ?? `Воронка #${f.ID ?? f.id}`,
+    })).filter(f => f.ID && f.ID !== '' && f.ID !== 'undefined');
+    log(`Воронки (raw тип: ${Array.isArray(fd.result)?'array':typeof fd.result}): найдено ${S.funnels.length} шт.`, 'info');
+    if (S.funnels.length === 0) {
+      log(`Сырые данные воронок: ${JSON.stringify(fd.result).slice(0,300)}`, 'warn');
+    }
   } catch (e) {
     log('Ошибка загрузки воронок: ' + e.message, 'err');
     S.funnels = [];
   }
 
-  // 2. Стадии для каждой воронки через crm.dealcategory.stages
-  //    Это правильный метод — crm.status.list не возвращает стадии кастомных воронок
+  // 2. Стадии сделок для каждой воронки
   S.stagesByFunnel = {};
 
-  // Общая воронка (без категории, id=0)
+  // Общая воронка (id=0) через crm.dealcategory.stages
   try {
     const gd = await b24('crm.dealcategory.stages', { id: 0 });
-    S.stagesByFunnel[''] = Array.isArray(gd.result) ? gd.result : [];
+    const raw = gd.result;
+    S.stagesByFunnel[''] = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
     log(`Общая воронка: ${S.stagesByFunnel[''].length} стадий`, 'info');
-  } catch {
-    // Fallback через status.list
+  } catch (e) {
+    log('crm.dealcategory.stages(0) ошибка: ' + e.message, 'warn');
     try {
       const sd = await b24('crm.status.list', { filter: { ENTITY_ID: 'DEAL_STAGE' } });
       S.stagesByFunnel[''] = Array.isArray(sd.result) ? sd.result : [];
@@ -669,10 +685,13 @@ async function loadPortal() {
   for (const f of S.funnels) {
     const fid = String(f.ID);
     try {
-      const fd2 = await b24('crm.dealcategory.stages', { id: fid });
-      S.stagesByFunnel[fid] = Array.isArray(fd2.result) ? fd2.result : [];
-      log(`Воронка "${f.NAME}" (id=${fid}): ${S.stagesByFunnel[fid].length} стадий`, 'info');
-    } catch {
+      const fd2 = await b24('crm.dealcategory.stages', { id: Number(fid) });
+      const raw2 = fd2.result;
+      const stages = Array.isArray(raw2) ? raw2 : (raw2 && typeof raw2 === 'object' ? Object.values(raw2) : []);
+      S.stagesByFunnel[fid] = stages;
+      log(`Воронка "${f.NAME}" (id=${fid}): ${stages.length} стадий`, 'info');
+    } catch (e) {
+      log(`Стадии воронки ${fid}: ошибка ${e.message}`, 'warn');
       S.stagesByFunnel[fid] = S.stagesByFunnel[''];
     }
   }
@@ -809,10 +828,11 @@ async function loadRecords() {
       setProgress(60, 'Загрузка реквизитов...');
       const reqMap = {};
       // crm.requisite.list с фильтром по ENTITY_TYPE_ID=4 (company) — берём все, затем маппируем
+      // crm.requisite.list — грузим все поля через select:['*'] чтобы найти БИН в любом поле
       try {
         const allReqs = await b24all('crm.requisite.list', {
           filter: { ENTITY_TYPE_ID: 4 },
-          select: ['ID','ENTITY_ID','RQ_COMPANY_ID_NUMBER','RQ_INN','NAME','PRESET_ID'],
+          select: ['*'],
         }, (loaded) => {
           setProgress(60 + Math.min(15, Math.round(loaded / 500 * 15)), `Реквизиты: ${loaded}...`);
         });
@@ -822,6 +842,12 @@ async function loadRecords() {
           reqMap[eid].push(r);
         });
         log(`Реквизиты загружены: ${allReqs.length} записей для ${Object.keys(reqMap).length} компаний`, 'ok');
+        // Логируем поля первого реквизита для диагностики
+        if (allReqs.length > 0) {
+          const sample = allReqs[0];
+          const rqFields = Object.keys(sample).filter(k => k.startsWith('RQ_')).join(', ');
+          log(`Поля реквизита (пример): ${rqFields || 'нет RQ_ полей'}`, 'info');
+        }
       } catch (e) {
         log('Ошибка загрузки реквизитов: ' + e.message, 'err');
       }
@@ -867,19 +893,44 @@ function getBIN(rec) {
   if (!rec._requisites) return [];
   const bins = [];
   for (const r of rec._requisites) {
-    // KZ: RQ_COMPANY_ID_NUMBER (БИН), RU: RQ_INN
-    const v = r.RQ_COMPANY_ID_NUMBER || r.RQ_INN || '';
-    const norm = v.replace(/\D/g, '');
-    if (norm) bins.push(norm);
+    // Перебираем все поля реквизита — ищем то что похоже на БИН (12 цифр для KZ, или ИНН 10/12 цифр для RU)
+    // Известные поля: RQ_COMPANY_ID_NUMBER (старый КЗ), RQ_INN (RU), RQ_CIF, а также любое UF_ поле
+    const candidates = [];
+    for (const [k, v] of Object.entries(r)) {
+      if (!v || typeof v !== 'string') continue;
+      const digits = v.replace(/\D/g, '');
+      // БИН KZ = 12 цифр, ИНН RU = 10 или 12 цифр
+      if (digits.length >= 10 && digits.length <= 12 && digits === v.trim()) {
+        candidates.push(digits);
+      }
+    }
+    // Также проверяем конкретные поля по приоритету
+    const knownFields = ['RQ_COMPANY_ID_NUMBER','RQ_INN','RQ_KPP','RQ_CIF','RQ_BIN'];
+    for (const f of knownFields) {
+      if (r[f]) {
+        const d = String(r[f]).replace(/\D/g, '');
+        if (d.length >= 10) candidates.push(d);
+      }
+    }
+    bins.push(...candidates);
   }
-  return [...new Set(bins)];
+  return [...new Set(bins)].filter(Boolean);
 }
 
 function getKeyValues(rec, key) {
   switch (key) {
     case 'phone':         return getPhones(rec);
     case 'email':         return getEmails(rec);
-    case 'name':          return [normStr([rec.NAME, rec.LAST_NAME].filter(Boolean).join(' '))].filter(Boolean);
+    case 'name': {
+      // Собираем возможные варианты: полное имя, только имя, только фамилия
+      const parts = [rec.NAME, rec.LAST_NAME].filter(Boolean);
+      if (!parts.length) return [];
+      const full = normName(parts.join(' '));
+      const vals = new Set([full]);
+      // Если есть оба компонента — добавляем в обратном порядке (фамилия+имя)
+      if (parts.length === 2) vals.add(normName([rec.LAST_NAME, rec.NAME].join(' ')));
+      return [...vals].filter(Boolean);
+    }
     case 'title':         return [normStr(rec.TITLE)].filter(Boolean);
     case 'contact_id':    return rec.CONTACT_ID ? [String(rec.CONTACT_ID)] : [];
     case 'company_id':    return rec.COMPANY_ID ? [String(rec.COMPANY_ID)] : [];
@@ -893,24 +944,30 @@ function getKeyValues(rec, key) {
 // ══════════════════════════════════════════════════════════════════════════════
 // DETECT DUPLICATES
 // ══════════════════════════════════════════════════════════════════════════════
-function detectOR(records, keys) {
-  const n = records.length;
-  const parent = records.map((_, i) => i);
-  const rank   = new Int32Array(n);
 
-  function find(x) {
-    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
-    return x;
-  }
-  function union(a, b) {
-    const ra = find(a), rb = find(b);
-    if (ra === rb) return;
-    if (rank[ra] < rank[rb]) parent[ra] = rb;
-    else if (rank[ra] > rank[rb]) parent[rb] = ra;
-    else { parent[rb] = ra; rank[ra]++; }
-  }
+// OR-режим: группы строятся PER KEY — каждый ключ дает свои кластеры,
+// потом результаты объединяются, но с пометкой по какому ключу совпало.
+// Транзитивность ТОЛЬКО в рамках одного ключа (A==B по телефону, B==C по телефону → группа).
+// Разные ключи НЕ объединяют транзитивно (A==B по телефону, B==C по email → разные группы).
+function detectOR(records, keys) {
+  // Для каждого ключа строим Union-Find независимо
+  const groupMap = new Map(); // groupKey → { records: [], matchKey }
+  const recInGroup = new Map(); // recIdx → groupKey (для дедупликации)
 
   for (const key of keys) {
+    const n = records.length;
+    const parent = records.map((_, i) => i);
+
+    function find(x) {
+      while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+      return x;
+    }
+    function union(a, b) {
+      const ra = find(a), rb = find(b);
+      if (ra === rb) return;
+      if (ra < rb) parent[rb] = ra; else parent[ra] = rb;
+    }
+
     const index = new Map();
     records.forEach((rec, i) => {
       getKeyValues(rec, key).forEach(val => {
@@ -919,16 +976,42 @@ function detectOR(records, keys) {
         index.get(val).push(i);
       });
     });
-    index.forEach(group => { for (let i = 1; i < group.length; i++) union(group[0], group[i]); });
+    index.forEach(group => {
+      for (let i = 1; i < group.length; i++) union(group[0], group[i]);
+    });
+
+    // Собираем кластеры только для этого ключа
+    const clusters = new Map();
+    records.forEach((rec, i) => {
+      const root = find(i);
+      // Только если хотя бы один в кластере — не singleton
+      if (!clusters.has(root)) clusters.set(root, []);
+      clusters.get(root).push(i);
+    });
+
+    clusters.forEach((idxList, root) => {
+      if (idxList.length < 2) return;
+      const gk = `${key}:${root}`;
+      groupMap.set(gk, { idxList, matchKey: key });
+    });
   }
 
-  const clusters = new Map();
-  records.forEach((rec, i) => {
-    const root = find(i);
-    if (!clusters.has(root)) clusters.set(root, []);
-    clusters.get(root).push(rec);
+  // Преобразуем в массив групп, дедупликация по составу
+  const seen = new Set();
+  const result = [];
+
+  groupMap.forEach(({ idxList, matchKey }) => {
+    const sorted = [...idxList].sort((a, b) => a - b);
+    const sig = sorted.join(',');
+    if (seen.has(sig)) return;
+    seen.add(sig);
+    const group = sorted.map(i => records[i]);
+    // Прикрепляем причину совпадения к каждой записи (для отображения)
+    group._matchKey = matchKey;
+    result.push(group);
   });
-  return [...clusters.values()].filter(g => g.length >= 2);
+
+  return result;
 }
 
 function detectAND(records, keys) {
@@ -1004,8 +1087,11 @@ async function findDuplicates() {
 
     const groups = S.matchMode === 'AND' ? detectAND(S.records, keys) : detectOR(S.records, keys);
 
+    // Сортируем записи внутри каждой группы
     groups.forEach(g => {
+      const mk = g._matchKey; // сохраняем до sort
       g.sort((a, b) => S.master === 'newest' ? Number(b.ID) - Number(a.ID) : Number(a.ID) - Number(b.ID));
+      g._matchKey = mk;
     });
 
     S.groups = groups;
@@ -1148,10 +1234,14 @@ function renderResults(groups) {
     card.dataset.gi = gi;
 
     // Header
+    const KEY_LABELS = { phone:'📞 телефон', email:'✉ email', name:'👤 имя', title:'📝 название', bin:'🏢 БИН', contact_id:'🔗 контакт', company_id:'🔗 компания', contact_phone:'📞 тел.контакта', contact_email:'✉ email контакта' };
+    const matchReason = group._matchKey ? (KEY_LABELS[group._matchKey] || group._matchKey) : '';
+
     const ghdr = document.createElement('div');
     ghdr.className = 'group-header';
     ghdr.innerHTML = `
       <span class="group-title">ГРУППА ${gi+1}</span>
+      ${matchReason ? `<span style="font-size:11px;color:var(--accent4);opacity:.8;">совпадение: ${matchReason}</span>` : ''}
       <span class="group-count">${group.length} записей</span>`;
 
     const gacts = document.createElement('div');
@@ -1561,18 +1651,14 @@ async function mergeRequisites(masterId, dupeId, changeLog) {
   try {
     const mr = await b24all('crm.requisite.list', {
       filter: { ENTITY_TYPE_ID: 4, ENTITY_ID: masterId },
-      select: ['ID','PRESET_ID','NAME','RQ_COMPANY_ID_NUMBER','RQ_INN','RQ_KPP','RQ_OGRN','RQ_OKPO',
-               'RQ_COMPANY_NAME','RQ_FIRST_NAME','RQ_LAST_NAME','RQ_EMAIL','RQ_PHONE',
-               'RQ_ADDR','RQ_BANK_NAME','RQ_BIK','RQ_ACC_NUM','RQ_COR_ACC_NUM'],
+      select: ['*'],
     });
     masterReqs = mr;
   } catch {}
   try {
     const dr = await b24all('crm.requisite.list', {
       filter: { ENTITY_TYPE_ID: 4, ENTITY_ID: dupeId },
-      select: ['ID','PRESET_ID','NAME','RQ_COMPANY_ID_NUMBER','RQ_INN','RQ_KPP','RQ_OGRN','RQ_OKPO',
-               'RQ_COMPANY_NAME','RQ_FIRST_NAME','RQ_LAST_NAME','RQ_EMAIL','RQ_PHONE',
-               'RQ_ADDR','RQ_BANK_NAME','RQ_BIK','RQ_ACC_NUM','RQ_COR_ACC_NUM'],
+      select: ['*'],
     });
     dupeReqs = dr;
   } catch {}
@@ -1722,8 +1808,59 @@ function mergeMultifield(masterArr, dupeArr) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FIELD TEST
+// DIAGNOSTICS
 // ══════════════════════════════════════════════════════════════════════════════
+async function diagRequisites() {
+  if (!S.webhook) { notify('Сначала загрузите портал', 'warn'); return; }
+  log('=== ДИАГНОСТИКА РЕКВИЗИТОВ ===', 'info');
+  try {
+    // Берём первую компанию
+    const clist = await b24('crm.company.list', { select: ['ID','TITLE'], start: 0 });
+    const companies = Array.isArray(clist.result) ? clist.result : [];
+    if (!companies.length) { log('Нет компаний для диагностики', 'warn'); return; }
+
+    const c = companies[0];
+    log(`Компания: ${c.TITLE} (#${c.ID})`, 'info');
+
+    // Получаем реквизиты
+    const rlist = await b24('crm.requisite.list', {
+      filter: { ENTITY_TYPE_ID: 4, ENTITY_ID: c.ID },
+      select: ['*'],
+    });
+    const reqs = Array.isArray(rlist.result) ? rlist.result : [];
+    log(`Реквизитов: ${reqs.length}`, 'info');
+
+    if (reqs.length) {
+      const r = reqs[0];
+      const rqFields = Object.entries(r).filter(([k]) => k.startsWith('RQ_'));
+      log(`RQ_ поля (${rqFields.length} шт):`, 'info');
+      rqFields.forEach(([k, v]) => { if (v) log(`  ${k} = ${v}`, 'ok'); else log(`  ${k} = (пусто)`, ''); });
+
+      if (!rqFields.length) {
+        log('RQ_ полей нет. Все поля реквизита:', 'warn');
+        Object.entries(r).forEach(([k, v]) => log(`  ${k} = ${v}`, ''));
+      }
+    }
+
+    // Проверяем пресеты
+    try {
+      const presets = await b24('crm.requisite.preset.list', {});
+      const pl = Array.isArray(presets.result) ? presets.result : [];
+      log(`Пресеты реквизитов (${pl.length}):`, 'info');
+      pl.forEach(p => log(`  id=${p.ID} name="${p.NAME}"`, 'info'));
+
+      if (pl.length) {
+        const pf = await b24('crm.requisite.preset.field.list', { presetId: pl[0].ID });
+        const fields = Array.isArray(pf.result) ? pf.result : [];
+        log(`Поля пресета "${pl[0].NAME}": ${fields.map(f=>f.FIELD_NAME).join(', ')}`, 'ok');
+      }
+    } catch (e) { log('Пресеты: ' + e.message, 'warn'); }
+
+    notify('Диагностика завершена — смотрите лог', 'ok');
+  } catch (e) {
+    log('Ошибка диагностики: ' + e.message, 'err');
+  }
+}
 async function testField() {
   const fn = document.getElementById('fieldName').value.trim();
   if (!fn) { notify('Введите имя поля', 'warn'); return; }
@@ -1795,6 +1932,9 @@ function init() {
   document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
   document.getElementById('btnExportJSON').addEventListener('click', exportJSON);
   document.getElementById('btnTestField').addEventListener('click', testField);
+
+  const diagBtn = document.getElementById('btnDiagReq');
+  if (diagBtn) diagBtn.addEventListener('click', diagRequisites);
 
   document.querySelectorAll('.action-item').forEach(el => {
     el.addEventListener('click', () => { S.action = el.dataset.action; updateActionUI(); });
